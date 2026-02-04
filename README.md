@@ -171,7 +171,7 @@ Step 8: Wait for bridge completion (~5 minutes)
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## 🏆 Hackathon Submission
 
