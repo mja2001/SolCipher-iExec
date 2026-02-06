@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount } from 'wagmi';
-import { ArrowDownUp, Lock, Shield, Info, Loader2 } from 'lucide-react';
+import { ArrowDownUp, Lock, Shield, Info, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { SUPPORTED_CHAINS, ChainKey } from '@/lib/wagmi-config';
-import { getMockBalance } from '@/lib/mock-data';
 import { WalletConnect } from '@/components/WalletConnect';
 import { BridgePreviewModal } from '@/components/BridgePreviewModal';
 import { TransactionStatus } from '@/components/TransactionStatus';
+import { FaucetInfo } from '@/components/FaucetInfo';
 import { useTransactions } from '@/hooks/use-transactions';
+import { useUSDCBalance } from '@/hooks/use-usdc-balance';
+import { useTokenApproval } from '@/hooks/use-token-approval';
+import { useTEEEncryption } from '@/hooks/use-tee-encryption';
 import { BridgeTransaction } from '@/lib/mock-data';
+import { BRIDGE_CONTRACT_ADDRESS } from '@/lib/contracts';
 import {
   Tooltip,
   TooltipContent,
@@ -21,8 +25,8 @@ import {
 } from '@/components/ui/tooltip';
 
 export default function BridgePage() {
-  const { isConnected } = useAccount();
-  const { initiateBridge, getTransaction } = useTransactions();
+  const { isConnected, address } = useAccount();
+  const { initiateBridge } = useTransactions();
   
   const [fromChain, setFromChain] = useState<ChainKey>('arbitrum-sepolia');
   const [toChain, setToChain] = useState<ChainKey>('ethereum-sepolia');
@@ -32,7 +36,28 @@ export default function BridgePage() {
   const [activeTx, setActiveTx] = useState<BridgeTransaction | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const balance = getMockBalance(fromChain);
+  // Real USDC balance from blockchain
+  const { balance, isLoading: isLoadingBalance, isUsingMock, refetch: refetchBalance } = useUSDCBalance({ 
+    chainKey: fromChain,
+    enabled: isConnected,
+  });
+
+  // Token approval hook
+  const { 
+    needsApproval, 
+    isApproving, 
+    isWaitingForApproval,
+    approve,
+    approvalTxHash,
+  } = useTokenApproval({
+    chainKey: fromChain,
+    amount,
+    spender: BRIDGE_CONTRACT_ADDRESS,
+  });
+
+  // TEE encryption hook
+  const { encrypt: encryptInTEE, isEncrypting } = useTEEEncryption();
+
   const estimatedGas = '~$0.15';
   const bridgeTime = '~5 minutes';
 
@@ -54,23 +79,52 @@ export default function BridgePage() {
     setShowPreview(false);
     setIsProcessing(true);
 
-    const tx = await initiateBridge({
-      fromChain,
-      toChain,
-      amount,
-      privacyEnabled,
-    });
+    try {
+      // Step 1: Handle approval if needed
+      if (needsApproval) {
+        await approve();
+      }
 
-    setActiveTx(tx);
-    setIsProcessing(false);
+      // Step 2: Encrypt in TEE if privacy is enabled
+      let encryptedDataHash: string | undefined;
+      if (privacyEnabled && address) {
+        encryptedDataHash = await encryptInTEE({
+          fromChain,
+          toChain,
+          amount,
+          recipient: address,
+          timestamp: Date.now(),
+        });
+      }
+
+      // Step 3: Initiate bridge transaction
+      const tx = await initiateBridge({
+        fromChain,
+        toChain,
+        amount,
+        privacyEnabled,
+      });
+
+      setActiveTx(tx);
+      
+      // Refetch balance after transaction
+      refetchBalance();
+    } catch (error) {
+      console.error('Bridge failed:', error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleClose = () => {
     setActiveTx(null);
     setAmount('');
+    refetchBalance();
   };
 
   const isValidAmount = amount && parseFloat(amount) > 0 && parseFloat(amount) <= parseFloat(balance);
+  const isApprovalInProgress = isApproving || isWaitingForApproval;
+  const isBusy = isProcessing || isApprovalInProgress || isEncrypting;
 
   // Show transaction status if there's an active transaction
   if (activeTx) {
@@ -144,9 +198,20 @@ export default function BridgePage() {
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label className="text-muted-foreground text-sm">Amount</Label>
-                <span className="text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {isLoadingBalance && <Loader2 className="h-3 w-3 animate-spin" />}
                   Balance: <span className="text-foreground font-mono">{balance} USDC</span>
-                </span>
+                  {isUsingMock && (
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <AlertCircle className="h-3 w-3 text-warning" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Using mock balance. Connect wallet to see real balance.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               </div>
               <div className="relative">
                 <Input
@@ -234,12 +299,27 @@ export default function BridgePage() {
                 size="lg"
                 className="w-full gap-2"
                 onClick={handlePreview}
-                disabled={!isValidAmount || isProcessing}
+                disabled={!isValidAmount || isBusy}
               >
-                {isProcessing ? (
+                {isApprovalInProgress ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Approving USDC...
+                  </>
+                ) : isEncrypting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Encrypting in TEE...
+                  </>
+                ) : isProcessing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Processing...
+                  </>
+                ) : needsApproval ? (
+                  <>
+                    <Shield className="h-4 w-4" />
+                    Approve & Bridge
                   </>
                 ) : (
                   <>
@@ -248,6 +328,11 @@ export default function BridgePage() {
                   </>
                 )}
               </Button>
+            )}
+
+            {/* Faucet Info for testnet */}
+            {isConnected && (
+              <FaucetInfo compact />
             )}
           </CardContent>
         </Card>
