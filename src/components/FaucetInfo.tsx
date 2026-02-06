@@ -1,6 +1,7 @@
 import { ExternalLink, Coins, Fuel } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FAUCET_URLS } from '@/lib/contracts';
+import { IEXEC_CHAIN } from '@/lib/wagmi-config';
 
 interface FaucetInfoProps {
   className?: string;
@@ -11,7 +12,7 @@ export function FaucetInfo({ className, compact = false }: FaucetInfoProps) {
   if (compact) {
     return (
       <div className={className}>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>Need testnet tokens?</span>
           <a
             href={FAUCET_URLS.usdc}
@@ -29,6 +30,15 @@ export function FaucetInfo({ className, compact = false }: FaucetInfoProps) {
             className="text-primary hover:underline inline-flex items-center gap-1"
           >
             Get ETH <ExternalLink className="h-3 w-3" />
+          </a>
+          <span>|</span>
+          <a
+            href={IEXEC_CHAIN.faucet}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline inline-flex items-center gap-1"
+          >
+            Get xRLC <ExternalLink className="h-3 w-3" />
           </a>
         </div>
       </div>
@@ -86,10 +96,32 @@ export function FaucetInfo({ className, compact = false }: FaucetInfoProps) {
             </a>
           </Button>
         </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-privacy/20 flex items-center justify-center text-xs">
+              🟡
+            </div>
+            <div>
+              <div className="text-sm font-medium">xRLC (Privacy)</div>
+              <div className="text-xs text-muted-foreground">iExec Bellecour Faucet</div>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={IEXEC_CHAIN.faucet}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="gap-1"
+            >
+              Get <ExternalLink className="h-3 w-3" />
+            </a>
+          </Button>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        You'll need testnet ETH for gas fees and testnet USDC to bridge.
+        You'll need testnet ETH for gas, USDC to bridge, and xRLC for privacy features.
       </p>
     </div>
   );
