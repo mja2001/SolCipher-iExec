@@ -157,11 +157,19 @@ export function TransactionStatus({ transactionId, onClose }: TransactionStatusP
           {tx.privacyEnabled && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-privacy/10 border border-privacy/20">
               <Lock className="h-5 w-5 text-privacy" />
-              <div>
-                <div className="font-medium text-privacy">Privacy Protected</div>
-                <div className="text-sm text-muted-foreground font-mono truncate">
-                  Hash: {tx.encryptedDataHash?.slice(0, 20)}...
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-privacy">Privacy Protected by iExec TEE</div>
+                <div className="text-sm text-muted-foreground">
+                  Protected Data Address:
                 </div>
+                <a 
+                  href={`https://blockscout.bellecour.iex.ec/address/${tx.encryptedDataHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-mono text-primary hover:underline truncate block"
+                >
+                  {tx.encryptedDataHash?.slice(0, 24)}...
+                </a>
               </div>
             </div>
           )}
